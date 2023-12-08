@@ -213,6 +213,7 @@ type server struct {
 	txIndex   *indexers.TxIndex
 	addrIndex *indexers.AddrIndex
 	cfIndex   *indexers.CfIndex
+	votes     *indexers.VotesIndex
 
 	// The fee estimator keeps track of how long transactions are left in
 	// the mempool before they are mined into blocks.
@@ -2629,6 +2630,14 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 		indexes = append(indexes, s.cfIndex)
 	}
 
+	// For the votes, we use an index to keep the code cleanly segmented, but they
+	// are enabled all of the time.
+	var err er.R
+	if s.votes, err = indexers.NewVotes(db, chainParams); err != nil {
+		return nil, err
+	}
+	indexes = append(indexes, s.votes)
+
 	// Create an index manager if any of the optional indexes are enabled.
 	var indexManager blockchain.IndexManager
 	if len(indexes) > 0 {
@@ -2642,7 +2651,6 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 	}
 
 	// Create a new block chain instance with the appropriate configuration.
-	var err er.R
 	s.chain, err = blockchain.New(&blockchain.Config{
 		DB:           s.db,
 		Interrupt:    interrupt,
@@ -2652,6 +2660,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 		SigCache:     s.sigCache,
 		IndexManager: indexManager,
 		HashCache:    s.hashCache,
+		Votes:        s.votes.VoteCompute(),
 	})
 	if err != nil {
 		return nil, err

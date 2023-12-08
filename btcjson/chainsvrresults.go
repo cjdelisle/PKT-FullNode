@@ -539,3 +539,16 @@ type EstimateSmartFeeResult struct {
 	Errors  []string `json:"errors,omitempty"`
 	Blocks  int64    `json:"blocks"`
 }
+
+type AddressInfo struct {
+	Address     string  `json:"address"`
+	Balance     float64 `json:"balance"`
+	Sbalance    string  `json:"sbalance"`
+	IsCandidate bool    `json:"is_candidate"`
+	VoteFor     string  `json:"vote_for"`
+}
+
+type ListAddressesResult struct {
+	Addresses []AddressInfo `json:"addresses"`
+	HasMore   bool          `json:"has_more"`
+}
