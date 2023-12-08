@@ -606,6 +606,9 @@ func handleCreateRawTransaction(s *rpcServer, cmd interface{}, closeChan <-chan 
 
 // handleDebugLevel handles debuglevel commands.
 func handleDebugLevel(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (interface{}, er.R) {
+	if err := log.SetLogLevels(cfg.DebugLevel); err != nil {
+		return nil, err
+	}
 	return "Done.", nil
 }
 
