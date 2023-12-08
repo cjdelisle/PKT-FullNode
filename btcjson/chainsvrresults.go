@@ -550,5 +550,6 @@ type AddressInfo struct {
 
 type ListAddressesResult struct {
 	Addresses []AddressInfo `json:"addresses"`
+	AsOfBlock int32         `json:"as_of_block"`
 	HasMore   bool          `json:"has_more"`
 }

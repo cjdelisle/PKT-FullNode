@@ -1022,13 +1022,16 @@ func handleGetAddressInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct
 		return nil, err
 	}
 	snap := s.cfg.Chain.BestSnapshot()
+	effectiveBlock := snap.Height
+	if c.Current == nil || !*c.Current {
+		effectiveBlock = vote_db.LastEpochEnd(effectiveBlock)
+	}
 	var out *btcjson.AddressInfo
 	if err := s.cfg.DB.View(func(dbTx database.Tx) er.R {
 		return vote_db.ListAddressInfo(
 			dbTx,
 			code,
-			snap.Height,
-			c.Current == nil || !*c.Current,
+			effectiveBlock,
 			func(ab *vote_db.AddressInfo) er.R {
 				if bytes.Equal(ab.AddressScript, code) {
 					addr := txscript.PkScriptToAddress(ab.AddressScript, s.cfg.ChainParams)
@@ -1060,17 +1063,23 @@ func handleListAddresses(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 		return nil, err
 	}
 	snap := s.cfg.Chain.BestSnapshot()
-	out := make([]btcjson.AddressInfo, 0, addressesPerBatch)
 	votingOnly := c.VotingOnly != nil && *c.VotingOnly
+	effectiveBlock := snap.Height
+	if c.Current == nil || !*c.Current {
+		effectiveBlock = vote_db.LastEpochEnd(effectiveBlock)
+	}
+	out := make([]btcjson.AddressInfo, 0, addressesPerBatch)
 	if err := s.cfg.DB.View(func(dbTx database.Tx) er.R {
 		i := 0
 		return vote_db.ListAddressInfo(
 			dbTx,
 			startFrom,
-			snap.Height,
-			c.Current == nil || !*c.Current,
+			effectiveBlock,
 			func(ab *vote_db.AddressInfo) er.R {
-				if votingOnly && len(ab.VoteFor) == 0 {
+				if votingOnly && len(ab.VoteFor) == 0 && !ab.IsCandidate {
+					return nil
+				}
+				if ab.Balance == 0 {
 					return nil
 				}
 				if i == 0 && bytes.Equal(ab.AddressScript, startFrom) {
@@ -1099,6 +1108,7 @@ func handleListAddresses(s *rpcServer, cmd interface{}, closeChan <-chan struct{
 	} else {
 		return btcjson.ListAddressesResult{
 			Addresses: out,
+			AsOfBlock: effectiveBlock,
 			HasMore:   er.IsLoopBreak(err),
 		}, nil
 	}

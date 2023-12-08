@@ -43,11 +43,12 @@ var abortErr = er.GenericErrorType.Code("abortErr flags that execution should st
 
 func (vc *VoteCompute) scanBalances(blockHeight int32, handler func(ai *db.AddressInfo) er.R) er.R {
 	var startFrom []byte
+	effectiveHeight := db.LastEpochEnd(blockHeight)
 	for {
 		deadline := time.Now().Add(timeLimit)
 		deadlineReached := false
 		if err := vc.db.View(func(tx database.Tx) er.R {
-			return db.ListAddressInfo(tx, startFrom, blockHeight, true, func(ai *db.AddressInfo) er.R {
+			return db.ListAddressInfo(tx, startFrom, effectiveHeight, func(ai *db.AddressInfo) er.R {
 				if time.Now().After(deadline) {
 					deadlineReached = true
 					startFrom = ai.AddressScript

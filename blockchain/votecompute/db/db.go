@@ -275,20 +275,21 @@ const VoteExpirationEpochs = 52
 
 const VoteExpirationBlocks = VoteExpirationEpochs * EpochBlocks
 
+func LastEpochEnd(currentBlockHeight int32) int32 {
+	epochNum := EpochNum(currentBlockHeight)
+	if epochNum == 0 {
+		return 0
+	} else {
+		return epochLastBlock(epochNum - 1)
+	}
+}
+
 func EpochNum(blockHeight int32) uint32 {
 	return uint32(blockHeight / EpochBlocks)
 }
 
 func epochLastBlock(epochNum uint32) int32 {
 	return int32((epochNum+1)*EpochBlocks - 1)
-}
-
-func getLimitBlock(currentBlockNum int32, lastEpoch bool) int32 {
-	epochNum := EpochNum(currentBlockNum)
-	if lastEpoch {
-		epochNum--
-	}
-	return epochLastBlock(epochNum)
 }
 
 func isExpiredBalance(bi []BalanceInfo, currentBlockNum int32) bool {
@@ -312,11 +313,10 @@ func isExpiredBalance(bi []BalanceInfo, currentBlockNum int32) bool {
 func ListAddressInfo(
 	dbTx database.Tx,
 	startFrom []byte,
-	currentBlock int32,
-	lastEpoch bool,
+	effectiveBlock int32,
 	handler func(*AddressInfo) er.R,
 ) er.R {
-	lastBlock := getLimitBlock(currentBlock, lastEpoch)
+	//lastBlock := getLimitBlock(currentBlock, lastEpoch)
 	buck := dbTx.Metadata().Bucket(bucketName)
 	if buck == nil {
 		return er.Errorf("Address balances not indexed, --addressbalances required for this RPC")
@@ -346,12 +346,12 @@ func ListAddressInfo(
 					AddressScript: bk,
 				}
 				for _, b := range bi {
-					if b.BlockNum <= lastBlock && b.BlockNum > currentBalance.BalanceBlock {
+					if b.BlockNum <= effectiveBlock && b.BlockNum > currentBalance.BalanceBlock {
 						currentBalance.BalanceBlock = int32(b.BlockNum)
 						currentBalance.Balance = btcutil.Amount(b.Balance)
 					}
 				}
-				if isExpiredBalance(bi, lastBlock) {
+				if isExpiredBalance(bi, effectiveBlock) {
 					currentBalance.ExpiredCount++
 				}
 			}
@@ -360,9 +360,9 @@ func ListAddressInfo(
 				return err
 			} else if vk, err := decodeVoteKey(k); err != nil {
 				return err
-			} else if vk.blockn < lastBlock-VoteExpirationBlocks {
+			} else if vk.blockn < effectiveBlock-VoteExpirationBlocks {
 				// The vote has passed into expiration, ignore it.
-				if vk.blockn < lastBlock-VoteExpirationBlocks-(2*EpochBlocks) {
+				if vk.blockn < effectiveBlock-VoteExpirationBlocks-(2*EpochBlocks) {
 					// We don't consider it prunable until it goes 2 epoch blocks older than
 					// the actual expiration - to guard against rollbacks.
 					currentBalance.ExpiredCount++
@@ -375,8 +375,8 @@ func ListAddressInfo(
 					currentBalance = AddressInfo{}
 				}
 				currentBalance.AddressScript = vk.address
-				if vk.blockn <= lastBlock && vk.blockn > currentBalance.VoteBlock {
-					if vk.blockn < lastBlock-(2*EpochBlocks) {
+				if vk.blockn <= effectiveBlock && vk.blockn > currentBalance.VoteBlock {
+					if vk.blockn < effectiveBlock-(2*EpochBlocks) {
 						// If the NEW vote is old enough that it won't possibly be rolled back,
 						// then the OLD vote can be pruned.
 						currentBalance.ExpiredCount++
