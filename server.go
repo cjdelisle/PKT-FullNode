@@ -231,6 +231,10 @@ type server struct {
 	// agentWhitelist is a list of whitelisted user agent substrings, no
 	// whitelisting will be applied if the list is empty or nil.
 	agentWhitelist []string
+
+	// When this is false, we frantically try trusted addresses to try to find peer
+	// when this is true, we explore possible addresses looking for new peers
+	relaxedMode mailbox.Mailbox[bool]
 }
 
 // serverPeer extends the peer to maintain state shared by the server and
@@ -2061,6 +2065,29 @@ func (s *server) sendRandomInv(state *peerState) {
 	}
 }
 
+func (s *server) seedDNSThread() {
+	for {
+		if !s.relaxedMode.Load() {
+			connmgr.SeedFromDNS(activeNetParams.Params, defaultRequiredServices,
+				pktdLookup, func(addrs []*wire.NetAddress) {
+					// Bitcoind uses a lookup of the dns seeder here. This
+					// is rather strange since the values looked up by the
+					// DNS seed lookups will vary quite a lot.
+					// cjd Dec 6 2023: We're switching to a "magic" address
+					//                 which will allow us to differentiate
+					//                 more trusted addresses from addresses
+					//                 coming from random nodes.
+					src := wire.NetAddress{
+						Services: protocol.SFTrusted,
+						IP:       net.IPv4(0, 0, 0, 0),
+					}
+					s.addrManager.AddAddresses(addrs, &src)
+				})
+		}
+		time.Sleep(time.Second * 40)
+	}
+}
+
 // peerHandler is used to handle peer operations such as adding and removing
 // peers to and from the server, banning peers, and broadcasting messages to
 // peers.  It must be run in a goroutine.
@@ -2087,21 +2114,7 @@ func (s *server) peerHandler() {
 
 	if !cfg.DisableDNSSeed {
 		// Add peers discovered through DNS to the address manager.
-		connmgr.SeedFromDNS(activeNetParams.Params, defaultRequiredServices,
-			pktdLookup, func(addrs []*wire.NetAddress) {
-				// Bitcoind uses a lookup of the dns seeder here. This
-				// is rather strange since the values looked up by the
-				// DNS seed lookups will vary quite a lot.
-				// cjd Dec 6 2023: We're switching to a "magic" address
-				//                 which will allow us to differentiate
-				//                 more trusted addresses from addresses
-				//                 coming from random nodes.
-				src := wire.NetAddress{
-					Services: protocol.SFTrusted,
-					IP:       net.IPv4(0, 0, 0, 0),
-				}
-				s.addrManager.AddAddresses(addrs, &src)
-			})
+		go s.seedDNSThread()
 	}
 	go s.connManager.Start()
 
@@ -2599,6 +2612,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 		agentBlacklist:       agentBlacklist,
 		agentWhitelist:       agentWhitelist,
 		banMgr:               *banmgr.New(&bmConfig),
+		relaxedMode:          mailbox.NewMailbox(false),
 	}
 
 	// Create the transaction and address indexes if needed.
@@ -2782,23 +2796,22 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 	}
 
 	localAddrs := localaddrs.New()
-	relaxedMode := mailbox.NewMailbox(false)
 	go func() {
 		for {
 			pc := s.peerCount()
 			hasSyncPeer := s.syncManager.SyncPeer() != nil
 			enoughPeers := pc > (targetOutbound - 2)
-			if relaxedMode.Load() {
+			if s.relaxedMode.Load() {
 				if !hasSyncPeer {
 					log.Infof("Lost sync peer, switch to fast peer search")
-					relaxedMode.Store(false)
+					s.relaxedMode.Store(false)
 				} else if !enoughPeers {
 					log.Infof("Only have [%d] peers, switch to fast peer search", pc)
-					relaxedMode.Store(false)
+					s.relaxedMode.Store(false)
 				}
 			} else if hasSyncPeer && enoughPeers {
 				log.Infof("Found [%d] peers including sync peer, switching to relaxed peer search", pc)
-				relaxedMode.Store(true)
+				s.relaxedMode.Store(true)
 			}
 
 			localAddrs.Referesh()
@@ -2816,7 +2829,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 	if !cfg.SimNet && !cfg.RegressionTest && len(cfg.ConnectPeers) == 0 {
 		newAddressFunc = func() (net.Addr, er.R) {
 			for tries := 0; tries < 100; tries++ {
-				addr := s.addrManager.GetAddress(relaxedMode.Load())
+				addr := s.addrManager.GetAddress(s.relaxedMode.Load())
 				if addr == nil {
 					break
 				}
