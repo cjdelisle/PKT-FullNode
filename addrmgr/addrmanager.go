@@ -797,6 +797,82 @@ func isGoodAddress(a *KnownAddress, relaxedMode bool) bool {
 	}
 }
 
+func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
+	var ka *KnownAddress
+	// Tried entry.
+	large := 1 << 30
+	factor := 1.0
+	// pick a random bucket.
+	startBucket := a.rand.Intn(len(a.addrTried))
+	for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
+		bucket := bucketMod % len(a.addrTried)
+		if a.addrTried[bucket].Len() == 0 {
+			continue
+		}
+		// Pick a random entry in the list
+		e := a.addrTried[bucket].Front()
+		for i := a.rand.Int63n(int64(a.addrTried[bucket].Len())); i > 0 || ka == nil; i-- {
+			a := e.Value.(*KnownAddress)
+			if isGoodAddress(a, relaxedMode) {
+				ka = a
+			}
+			e = e.Next()
+			if e == nil {
+				break
+			}
+		}
+		if ka == nil {
+			continue
+		}
+		randval := a.rand.Intn(large)
+		if float64(randval) < (factor * ka.chance() * float64(large)) {
+			log.Tracef("Selected %v from tried bucket",
+				NetAddressKey(ka.na))
+			break
+		}
+		factor *= 1.2
+	}
+	return ka
+}
+
+func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
+	var ka *KnownAddress
+	// new node.
+	// XXX use a closure/function to avoid repeating this.
+	large := 1 << 30
+	factor := 1.0
+	// Pick a random bucket.
+	startBucket := a.rand.Intn(len(a.addrNew))
+	for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
+		bucket := bucketMod % len(a.addrNew)
+		if len(a.addrNew[bucket]) == 0 {
+			continue
+		}
+		// Then, a random entry in it.
+		nth := a.rand.Intn(len(a.addrNew[bucket]))
+		for _, value := range a.addrNew[bucket] {
+			if isGoodAddress(value, relaxedMode) {
+				ka = value
+			}
+			if nth == 0 && ka != nil {
+				break
+			}
+			nth--
+		}
+		if ka == nil {
+			continue
+		}
+		randval := a.rand.Intn(large)
+		if float64(randval) < (factor * ka.chance() * float64(large)) {
+			log.Tracef("Selected %v from new bucket",
+				NetAddressKey(ka.na))
+			break
+		}
+		factor *= 1.2
+	}
+	return ka
+}
+
 // GetAddress returns a single address that should be routable.  It picks a
 // random one from the possible addresses with preference given to ones that
 // have not been used recently and should not pick 'close' addresses
@@ -807,86 +883,26 @@ func (a *AddrManager) GetAddress(relaxedMode bool) *KnownAddress {
 	defer a.mtx.Unlock()
 
 	if a.numAddresses() == 0 {
-		log.Info("GetAddress() -> nil because no addresses at all")
+		log.Infof("GetAddress() -> nil because no addresses at all")
 		return nil
 	}
 
 	// Use a 50% chance for choosing between tried and new table entries.
-	var ka *KnownAddress
 	if a.nTried > 0 && (a.nNew == 0 || a.rand.Intn(2) == 0) {
-		// Tried entry.
-		large := 1 << 30
-		factor := 1.0
-		// pick a random bucket.
-		startBucket := a.rand.Intn(len(a.addrTried))
-		for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
-			bucket := bucketMod % len(a.addrTried)
-			if a.addrTried[bucket].Len() == 0 {
-				continue
-			}
-
-			// Pick a random entry in the list
-			e := a.addrTried[bucket].Front()
-			for i := a.rand.Int63n(int64(a.addrTried[bucket].Len())); i > 0 || ka == nil; i-- {
-				a := e.Value.(*KnownAddress)
-				if isGoodAddress(a, relaxedMode) {
-					ka = a
-				}
-				e = e.Next()
-				if e == nil {
-					break
-				}
-			}
-			if ka == nil {
-				continue
-			}
-			randval := a.rand.Intn(large)
-			if float64(randval) < (factor * ka.chance() * float64(large)) {
-				log.Tracef("Selected %v from tried bucket",
-					NetAddressKey(ka.na))
-				return ka
-			}
-			factor *= 1.2
+		if ka := a.getTriedAddress(relaxedMode); ka != nil {
+			return ka
+		} else if ka := a.getUntriedAddress(relaxedMode); ka != nil {
+			return ka
 		}
 	} else {
-		// new node.
-		// XXX use a closure/function to avoid repeating this.
-		large := 1 << 30
-		factor := 1.0
-		// Pick a random bucket.
-		startBucket := a.rand.Intn(len(a.addrNew))
-		for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
-			bucket := bucketMod % len(a.addrNew)
-			if len(a.addrNew[bucket]) == 0 {
-				continue
-			}
-			// Then, a random entry in it.
-			nth := a.rand.Intn(len(a.addrNew[bucket]))
-			for _, value := range a.addrNew[bucket] {
-				if isGoodAddress(value, relaxedMode) {
-					ka = value
-				}
-				if nth == 0 && ka != nil {
-					break
-				}
-				nth--
-			}
-			if ka == nil {
-				continue
-			}
-			randval := a.rand.Intn(large)
-			if float64(randval) < (factor * ka.chance() * float64(large)) {
-				log.Tracef("Selected %v from new bucket",
-					NetAddressKey(ka.na))
-				return ka
-			}
-			factor *= 1.2
+		if ka := a.getUntriedAddress(relaxedMode); ka != nil {
+			return ka
+		} else if ka := a.getTriedAddress(relaxedMode); ka != nil {
+			return ka
 		}
 	}
-	if ka == nil {
-		log.Info("GetAddress() -> nil no qualifying addresses")
-	}
-	return ka
+	log.Info("GetAddress() -> nil no qualifying addresses")
+	return nil
 }
 
 func (a *AddrManager) find(addr *wire.NetAddress) *KnownAddress {
