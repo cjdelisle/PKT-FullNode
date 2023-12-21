@@ -2096,7 +2096,10 @@ func (s *server) peerHandler() {
 				//                 which will allow us to differentiate
 				//                 more trusted addresses from addresses
 				//                 coming from random nodes.
-				src := wire.NetAddress{Services: protocol.SFTrusted}
+				src := wire.NetAddress{
+					Services: protocol.SFTrusted,
+					IP:       net.IPv4(0, 0, 0, 0),
+				}
 				s.addrManager.AddAddresses(addrs, &src)
 			})
 	}
