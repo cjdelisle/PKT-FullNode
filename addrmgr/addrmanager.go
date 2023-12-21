@@ -807,10 +807,12 @@ func (a *AddrManager) GetAddress(relaxedMode bool) *KnownAddress {
 	defer a.mtx.Unlock()
 
 	if a.numAddresses() == 0 {
+		log.Info("GetAddress() -> nil because no addresses at all")
 		return nil
 	}
 
 	// Use a 50% chance for choosing between tried and new table entries.
+	var ka *KnownAddress
 	if a.nTried > 0 && (a.nNew == 0 || a.rand.Intn(2) == 0) {
 		// Tried entry.
 		large := 1 << 30
@@ -825,7 +827,6 @@ func (a *AddrManager) GetAddress(relaxedMode bool) *KnownAddress {
 
 			// Pick a random entry in the list
 			e := a.addrTried[bucket].Front()
-			var ka *KnownAddress
 			for i := a.rand.Int63n(int64(a.addrTried[bucket].Len())); i > 0 || ka == nil; i-- {
 				a := e.Value.(*KnownAddress)
 				if isGoodAddress(a, relaxedMode) {
@@ -860,7 +861,6 @@ func (a *AddrManager) GetAddress(relaxedMode bool) *KnownAddress {
 				continue
 			}
 			// Then, a random entry in it.
-			var ka *KnownAddress
 			nth := a.rand.Intn(len(a.addrNew[bucket]))
 			for _, value := range a.addrNew[bucket] {
 				if isGoodAddress(value, relaxedMode) {
@@ -883,7 +883,10 @@ func (a *AddrManager) GetAddress(relaxedMode bool) *KnownAddress {
 			factor *= 1.2
 		}
 	}
-	return nil
+	if ka == nil {
+		log.Info("GetAddress() -> nil no qualifying addresses")
+	}
+	return ka
 }
 
 func (a *AddrManager) find(addr *wire.NetAddress) *KnownAddress {

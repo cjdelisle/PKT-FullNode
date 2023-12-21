@@ -745,7 +745,7 @@ func (sp *serverPeer) OnGetCFilters(_ *peer.Peer, msg *wire.MsgGetCFilters) {
 		int32(msg.StartHeight), &msg.StopHash, wire.MaxGetCFiltersReqRange,
 	)
 	if err != nil {
-		log.Infof("Invalid getcfilters request from [%v]: %v", sp.String(), err)
+		log.Debugf("Invalid getcfilters request from [%v]: %v", sp.String(), err)
 		return
 	}
 
