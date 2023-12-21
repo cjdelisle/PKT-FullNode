@@ -798,7 +798,6 @@ func isGoodAddress(a *KnownAddress, relaxedMode bool) bool {
 }
 
 func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
-	var ka *KnownAddress
 	// Tried entry.
 	large := 1 << 30
 	factor := 1.0
@@ -811,6 +810,7 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
 		}
 		// Pick a random entry in the list
 		e := a.addrTried[bucket].Front()
+		var ka *KnownAddress
 		for i := a.rand.Int63n(int64(a.addrTried[bucket].Len())); i > 0 || ka == nil; i-- {
 			a := e.Value.(*KnownAddress)
 			if isGoodAddress(a, relaxedMode) {
@@ -828,15 +828,14 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
 		if float64(randval) < (factor * ka.chance() * float64(large)) {
 			log.Tracef("Selected %v from tried bucket",
 				NetAddressKey(ka.na))
-			break
+			return ka
 		}
 		factor *= 1.2
 	}
-	return ka
+	return nil
 }
 
 func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
-	var ka *KnownAddress
 	// new node.
 	// XXX use a closure/function to avoid repeating this.
 	large := 1 << 30
@@ -850,6 +849,7 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
 		}
 		// Then, a random entry in it.
 		nth := a.rand.Intn(len(a.addrNew[bucket]))
+		var ka *KnownAddress
 		for _, value := range a.addrNew[bucket] {
 			if isGoodAddress(value, relaxedMode) {
 				ka = value
@@ -870,7 +870,28 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
 		}
 		factor *= 1.2
 	}
-	return ka
+	return nil
+}
+
+func (a *AddrManager) getAddress(relaxedMode bool) *KnownAddress {
+	tried := a.getTriedAddress(relaxedMode)
+	untried := a.getUntriedAddress(relaxedMode)
+	if tried != nil && untried != nil {
+		if a.nTried > 0 && (a.nNew == 0 || a.rand.Intn(2) == 0) {
+			return tried
+		} else {
+			return untried
+		}
+	} else if tried != nil {
+		return tried
+	} else if untried != nil {
+		return untried
+	} else if !relaxedMode {
+		return a.getAddress(true)
+	} else {
+		log.Info("GetAddress() -> nil no qualifying addresses found")
+		return nil
+	}
 }
 
 // GetAddress returns a single address that should be routable.  It picks a
@@ -886,23 +907,7 @@ func (a *AddrManager) GetAddress(relaxedMode bool) *KnownAddress {
 		log.Infof("GetAddress() -> nil because no addresses at all")
 		return nil
 	}
-
-	// Use a 50% chance for choosing between tried and new table entries.
-	if a.nTried > 0 && (a.nNew == 0 || a.rand.Intn(2) == 0) {
-		if ka := a.getTriedAddress(relaxedMode); ka != nil {
-			return ka
-		} else if ka := a.getUntriedAddress(relaxedMode); ka != nil {
-			return ka
-		}
-	} else {
-		if ka := a.getUntriedAddress(relaxedMode); ka != nil {
-			return ka
-		} else if ka := a.getTriedAddress(relaxedMode); ka != nil {
-			return ka
-		}
-	}
-	log.Info("GetAddress() -> nil no qualifying addresses")
-	return nil
+	return a.getAddress(relaxedMode)
 }
 
 func (a *AddrManager) find(addr *wire.NetAddress) *KnownAddress {
