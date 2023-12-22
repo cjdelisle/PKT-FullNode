@@ -755,7 +755,7 @@ func (a *AddrManager) HostToNetAddress(host string, port uint16, services protoc
 	return wire.NewNetAddressIPPort(ip, port, services), nil
 }
 
-func (a *AddrManager) isGoodAddress(ka *KnownAddress, relaxedMode bool) bool {
+func (a *AddrManager) isGoodAddress(ka *KnownAddress, relaxedMode bool, isOk func(*KnownAddress) bool) bool {
 	// If for some reason, we're not able to get our local addrs (OS permissions)
 	// we'll pretend everything is ok.
 	if !a.localAddrs.Reachable(ka.NetAddress()) && a.localAddrs.IsWorking() {
@@ -766,14 +766,21 @@ func (a *AddrManager) isGoodAddress(ka *KnownAddress, relaxedMode bool) bool {
 		// Never connect to something which has been connected in the past 60 seconds.
 		return false
 	} else if relaxedMode {
-		return true
 	} else if ka.srcAddr.Services&protocol.SFTrusted == protocol.SFTrusted {
-		return true
 	} else if ka.lastsuccess.After(time.Unix(0, 0)) {
-		return true
 	} else {
 		return false
 	}
+	a.mtx.Unlock()
+	ok := isOk(ka)
+	a.mtx.Lock()
+	if !ok {
+		return false
+	} else if ka.lastattempt.Add(time.Second * 60).After(time.Now()) {
+		// Race condition because we had to unlock
+		return false
+	}
+	return true
 }
 
 func (a *AddrManager) getTriedAddress(relaxedMode bool, isOk func(*KnownAddress) bool) *KnownAddress {
@@ -796,7 +803,7 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool, isOk func(*KnownAddress)
 		// Walk backward from the starting point looking for a usable address
 		for e != nil {
 			va := e.Value.(*KnownAddress)
-			if a.isGoodAddress(va, relaxedMode) && isOk(va) {
+			if a.isGoodAddress(va, relaxedMode, isOk) {
 				return va
 			}
 			e = e.Next()
@@ -806,7 +813,7 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool, isOk func(*KnownAddress)
 		e = a.addrTried[bucket].Front()
 		for i := startingPoint; i > 0 && e != nil; i-- {
 			va := e.Value.(*KnownAddress)
-			if a.isGoodAddress(va, relaxedMode) && isOk(va) {
+			if a.isGoodAddress(va, relaxedMode, isOk) {
 				return va
 			}
 			e = e.Next()
@@ -833,7 +840,7 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool, isOk func(*KnownAddres
 			if i < startingPoint {
 				continue
 			}
-			if a.isGoodAddress(value, relaxedMode) && isOk(value) {
+			if a.isGoodAddress(value, relaxedMode, isOk) {
 				return value
 			}
 		}
@@ -845,7 +852,7 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool, isOk func(*KnownAddres
 			if i >= startingPoint {
 				break
 			}
-			if a.isGoodAddress(value, relaxedMode) && isOk(value) {
+			if a.isGoodAddress(value, relaxedMode, isOk) {
 				return value
 			}
 		}
