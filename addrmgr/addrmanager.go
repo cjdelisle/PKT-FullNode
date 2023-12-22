@@ -786,7 +786,10 @@ func NetAddressKey(na *wire.NetAddress) string {
 }
 
 func isGoodAddress(a *KnownAddress, relaxedMode bool) bool {
-	if relaxedMode {
+	if a.lastattempt.Add(time.Second * 60).After(time.Now()) {
+		// Never connect to something which has been connected in the past 60 seconds.
+		return false
+	} else if relaxedMode {
 		return true
 	} else if a.srcAddr.Services&protocol.SFTrusted == protocol.SFTrusted {
 		return true
