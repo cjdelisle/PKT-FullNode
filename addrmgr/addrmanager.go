@@ -776,105 +776,100 @@ func (a *AddrManager) isGoodAddress(ka *KnownAddress, relaxedMode bool) bool {
 	}
 }
 
-func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
-	// Tried entry.
-	large := 1 << 30
-	factor := 1.0
-	// pick a random bucket.
+func (a *AddrManager) getTriedAddress(relaxedMode bool, isOk func(*KnownAddress) bool) *KnownAddress {
+	// pick a random starting bucket.
 	startBucket := a.rand.Intn(len(a.addrTried))
-	var ka *KnownAddress
 	for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
 		bucket := bucketMod % len(a.addrTried)
 		if a.addrTried[bucket].Len() == 0 {
 			continue
 		}
-		// Pick a random entry in the list
+		// Pick a random starting point within the bucket
+		startingPoint := a.rand.Int63n(int64(a.addrTried[bucket].Len()))
+
+		// Walk to that starting point
 		e := a.addrTried[bucket].Front()
-		for i := a.rand.Int63n(int64(a.addrTried[bucket].Len())); i > 0 || ka == nil; i-- {
+		for i := startingPoint; i > 0 && e != nil; i-- {
+			e = e.Next()
+		}
+
+		// Walk backward from the starting point looking for a usable address
+		for e != nil {
 			va := e.Value.(*KnownAddress)
-			if a.isGoodAddress(va, relaxedMode) {
-				ka = va
+			if a.isGoodAddress(va, relaxedMode) && isOk(va) {
+				return va
 			}
 			e = e.Next()
-			if e == nil {
-				break
+		}
+
+		// Reset and walk from the front of the bucket toward the starting point
+		e = a.addrTried[bucket].Front()
+		for i := startingPoint; i > 0 && e != nil; i-- {
+			va := e.Value.(*KnownAddress)
+			if a.isGoodAddress(va, relaxedMode) && isOk(va) {
+				return va
 			}
+			e = e.Next()
 		}
-		if ka == nil {
-			continue
-		}
-		randval := a.rand.Intn(large)
-		if float64(randval) < (factor * ka.chance() * float64(large)) {
-			log.Tracef("Selected %v from tried bucket",
-				addrutil.NetAddressKey(ka.na))
-			return ka
-		}
-		factor *= 1.2
-	}
-	if relaxedMode {
-		return ka
 	}
 	return nil
 }
 
-func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
-	// new node.
-	// XXX use a closure/function to avoid repeating this.
-	large := 1 << 30
-	factor := 1.0
-	// Pick a random bucket.
+func (a *AddrManager) getUntriedAddress(relaxedMode bool, isOk func(*KnownAddress) bool) *KnownAddress {
+	// Pick a random starting bucket.
 	startBucket := a.rand.Intn(len(a.addrNew))
-	var ka *KnownAddress
 	for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
 		bucket := bucketMod % len(a.addrNew)
 		if len(a.addrNew[bucket]) == 0 {
 			continue
 		}
-		// Then, a random entry in it.
-		nth := a.rand.Intn(len(a.addrNew[bucket]))
+		// Then, a random starting point in it.
+		startingPoint := a.rand.Intn(len(a.addrNew[bucket]))
+
+		// Skip until starting point, take first valid address
+		i := -1
 		for _, value := range a.addrNew[bucket] {
-			if a.isGoodAddress(value, relaxedMode) {
-				ka = value
+			i++
+			if i < startingPoint {
+				continue
 			}
-			if nth == 0 && ka != nil {
+			if a.isGoodAddress(value, relaxedMode) && isOk(value) {
+				return value
+			}
+		}
+
+		// Skip after starting point, take first valid address
+		i = -1
+		for _, value := range a.addrNew[bucket] {
+			i++
+			if i >= startingPoint {
 				break
 			}
-			nth--
+			if a.isGoodAddress(value, relaxedMode) && isOk(value) {
+				return value
+			}
 		}
-		if ka == nil {
-			continue
-		}
-		randval := a.rand.Intn(large)
-		if float64(randval) < (factor * ka.chance() * float64(large)) {
-			log.Tracef("Selected %v from new bucket",
-				addrutil.NetAddressKey(ka.na))
-			break
-		}
-		factor *= 1.2
-	}
-	if relaxedMode {
-		return ka
 	}
 	return nil
 }
 
-func (a *AddrManager) getAddress(relaxedMode bool) *KnownAddress {
-	tried := a.getTriedAddress(relaxedMode)
-	untried := a.getUntriedAddress(relaxedMode)
-	if tried != nil && untried != nil {
-		if a.nTried > 0 && (a.nNew == 0 || a.rand.Intn(2) == 0) {
-			return tried
-		} else {
-			return untried
+func (a *AddrManager) getAddress(relaxedMode bool, isOk func(*KnownAddress) bool) *KnownAddress {
+	if a.nTried > 0 && (a.nNew == 0 || a.rand.Intn(2) == 0) {
+		if addr := a.getTriedAddress(relaxedMode, isOk); addr != nil {
+			return addr
+		} else if addr := a.getUntriedAddress(relaxedMode, isOk); addr != nil {
+			return addr
 		}
-	} else if tried != nil {
-		return tried
-	} else if untried != nil {
-		return untried
-	} else if !relaxedMode {
-		return a.getAddress(true)
 	} else {
-		log.Info("GetAddress() -> nil no qualifying addresses found")
+		if addr := a.getUntriedAddress(relaxedMode, isOk); addr != nil {
+			return addr
+		} else if addr := a.getTriedAddress(relaxedMode, isOk); addr != nil {
+			return addr
+		}
+	}
+	if !relaxedMode {
+		return a.getAddress(true, isOk)
+	} else {
 		return nil
 	}
 }
@@ -883,7 +878,7 @@ func (a *AddrManager) getAddress(relaxedMode bool) *KnownAddress {
 // random one from the possible addresses with preference given to ones that
 // have not been used recently and should not pick 'close' addresses
 // consecutively.
-func (a *AddrManager) GetAddress() *KnownAddress {
+func (a *AddrManager) GetAddress(isOk func(*KnownAddress) bool) *KnownAddress {
 	// Protect concurrent access.
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
@@ -892,7 +887,16 @@ func (a *AddrManager) GetAddress() *KnownAddress {
 		log.Infof("GetAddress() -> nil because no addresses at all")
 		return nil
 	}
-	return a.getAddress(false)
+	addr := a.getAddress(false, isOk)
+	if addr != nil {
+		// Because we have an isOk function, we can assume that if that function passes
+		// the address WILL be attempted.
+		addr.attempts++
+		addr.lastattempt = time.Now()
+	} else {
+		log.Infof("GetAddress() -> nil no qualifying addresses found")
+	}
+	return addr
 }
 
 func (a *AddrManager) find(addr *wire.NetAddress) *KnownAddress {
@@ -911,23 +915,6 @@ func (a *AddrManager) GetLastAttempt(addr *wire.NetAddress) time.Time {
 	}
 
 	return ka.LastAttempt()
-}
-
-// Attempt increases the given address' attempt counter and updates
-// the last attempt time.
-func (a *AddrManager) Attempt(addr *wire.NetAddress) {
-	a.mtx.Lock()
-	defer a.mtx.Unlock()
-
-	// find address.
-	// Surely address will be in tried by now?
-	ka := a.find(addr)
-	if ka == nil {
-		return
-	}
-	// set last tried time to now
-	ka.attempts++
-	ka.lastattempt = time.Now()
 }
 
 // Connected Marks the given address as currently connected and working at the

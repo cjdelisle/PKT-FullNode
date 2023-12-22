@@ -2526,13 +2526,6 @@ func setupRPCListeners() ([]net.Listener, er.R) {
 	return listeners, nil
 }
 
-func (s *server) peerCount() int {
-	replyChan := make(chan []*serverPeer)
-	s.query <- getPeersMsg{reply: replyChan}
-	serverPeers := <-replyChan
-	return len(serverPeers)
-}
-
 // newServer returns a new pktd server configured to listen on addr for the
 // bitcoin network type specified by chainParams.  Use start to begin accepting
 // connections from peers.
@@ -2790,12 +2783,9 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 	var newAddressFunc func() (net.Addr, er.R)
 	if !cfg.SimNet && !cfg.RegressionTest && len(cfg.ConnectPeers) == 0 {
 		newAddressFunc = func() (net.Addr, er.R) {
-			for tries := 0; tries < 100; tries++ {
-				addr := s.addrManager.GetAddress()
-				if addr == nil {
-					break
-				}
-
+			tries := 0
+			addr := s.addrManager.GetAddress(func(addr *addrmgr.KnownAddress) bool {
+				tries++
 				// Address will not be invalid, local or unroutable
 				// because addrmanager rejects those on addition.
 				// Just check that we don't already have an address
@@ -2804,30 +2794,26 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 				// others.
 				key := addrutil.GroupKey(addr.NetAddress())
 				if s.OutboundGroupCount(key) != 0 {
-					continue
+					return false
 				}
-
 				// only allow recent nodes (10mins) after we failed 10
 				// times
 				lastTime := s.addrManager.GetLastAttempt(addr.NetAddress())
 				if tries < 10 && time.Since(lastTime) < 10*time.Minute {
-					continue
+					return false
 				}
-
 				// allow nondefault ports after 20 failed tries.
 				if tries < 20 && fmt.Sprintf("%d", addr.NetAddress().Port) !=
 					activeNetParams.DefaultPort {
-					continue
+					return false
 				}
-
-				// Mark an attempt for the valid address.
-				s.addrManager.Attempt(addr.NetAddress())
-
-				addrString := addrutil.NetAddressKey(addr.NetAddress())
-				return addrStringToNetAddr(addrString)
+				return true
+			})
+			if addr == nil {
+				return nil, er.New("no valid connect address")
 			}
-
-			return nil, er.New("no valid connect address")
+			addrString := addrutil.NetAddressKey(addr.NetAddress())
+			return addrStringToNetAddr(addrString)
 		}
 	}
 

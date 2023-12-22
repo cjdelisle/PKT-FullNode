@@ -212,6 +212,10 @@ func TestAddLocalAddress(t *testing.T) {
 	}
 }
 
+func itsOk(_ *addrmgr.KnownAddress) bool {
+	return true
+}
+
 func TestAttempt(t *testing.T) {
 	n := addrmgr.New("testattempt", lookupFunc)
 
@@ -220,14 +224,11 @@ func TestAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Adding address failed: %v", err)
 	}
-	ka := n.GetAddress()
+	ka := n.GetAddress(itsOk)
 
 	if !ka.LastAttempt().IsZero() {
 		t.Errorf("Address should not have attempts, but does")
 	}
-
-	na := ka.NetAddress()
-	n.Attempt(na)
 
 	if ka.LastAttempt().IsZero() {
 		t.Errorf("Address should have an attempt, but does not")
@@ -242,7 +243,7 @@ func TestConnected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Adding address failed: %v", err)
 	}
-	ka := n.GetAddress()
+	ka := n.GetAddress(itsOk)
 	na := ka.NetAddress()
 	// make it an hour ago
 	na.Timestamp = time.Unix(time.Now().Add(time.Hour*-1).Unix(), 0)
@@ -322,7 +323,7 @@ func TestGetAddress(t *testing.T) {
 	n := addrmgr.New("testgetaddress", lookupFunc)
 
 	// Get an address from an empty set (should error)
-	if rv := n.GetAddress(); rv != nil {
+	if rv := n.GetAddress(itsOk); rv != nil {
 		t.Errorf("GetAddress failed: got: %v want: %v\n", rv, nil)
 	}
 
@@ -331,7 +332,7 @@ func TestGetAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Adding address failed: %v", err)
 	}
-	ka := n.GetAddress()
+	ka := n.GetAddress(itsOk)
 	if ka == nil {
 		t.Fatalf("Did not get an address where there is one in the pool")
 	}
@@ -341,7 +342,7 @@ func TestGetAddress(t *testing.T) {
 
 	// Mark this as a good address and get it
 	n.Good(ka.NetAddress())
-	ka = n.GetAddress()
+	ka = n.GetAddress(itsOk)
 	if ka == nil {
 		t.Fatalf("Did not get an address where there is one in the pool")
 	}
