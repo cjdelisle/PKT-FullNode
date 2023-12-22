@@ -782,6 +782,7 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
 	factor := 1.0
 	// pick a random bucket.
 	startBucket := a.rand.Intn(len(a.addrTried))
+	var ka *KnownAddress
 	for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
 		bucket := bucketMod % len(a.addrTried)
 		if a.addrTried[bucket].Len() == 0 {
@@ -789,7 +790,6 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
 		}
 		// Pick a random entry in the list
 		e := a.addrTried[bucket].Front()
-		var ka *KnownAddress
 		for i := a.rand.Int63n(int64(a.addrTried[bucket].Len())); i > 0 || ka == nil; i-- {
 			va := e.Value.(*KnownAddress)
 			if a.isGoodAddress(va, relaxedMode) {
@@ -811,6 +811,9 @@ func (a *AddrManager) getTriedAddress(relaxedMode bool) *KnownAddress {
 		}
 		factor *= 1.2
 	}
+	if relaxedMode {
+		return ka
+	}
 	return nil
 }
 
@@ -821,6 +824,7 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
 	factor := 1.0
 	// Pick a random bucket.
 	startBucket := a.rand.Intn(len(a.addrNew))
+	var ka *KnownAddress
 	for bucketMod := startBucket; bucketMod < startBucket*2; bucketMod++ {
 		bucket := bucketMod % len(a.addrNew)
 		if len(a.addrNew[bucket]) == 0 {
@@ -828,7 +832,6 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
 		}
 		// Then, a random entry in it.
 		nth := a.rand.Intn(len(a.addrNew[bucket]))
-		var ka *KnownAddress
 		for _, value := range a.addrNew[bucket] {
 			if a.isGoodAddress(value, relaxedMode) {
 				ka = value
@@ -848,6 +851,9 @@ func (a *AddrManager) getUntriedAddress(relaxedMode bool) *KnownAddress {
 			break
 		}
 		factor *= 1.2
+	}
+	if relaxedMode {
+		return ka
 	}
 	return nil
 }
