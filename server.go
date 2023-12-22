@@ -2629,7 +2629,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 		indexes = append(indexes, s.addrIndex)
 	}
 	if !cfg.NoCFilters {
-		log.Info("Committed filter index is enabled")
+		log.Infof("Committed filter index is enabled")
 		s.cfIndex = indexers.NewCfIndex(db, chainParams)
 		indexes = append(indexes, s.cfIndex)
 	}
@@ -2790,14 +2790,14 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 			enoughPeers := pc > (targetOutbound / 2)
 			if relaxedMode.Load() {
 				if !hasSyncPeer {
-					log.Infof("Lost sync peer, switch to fast peer search")
+					log.Infof("⚠️ Lost sync peer, switch to startup mode")
 					relaxedMode.Store(false)
 				} else if !enoughPeers {
-					log.Infof("Only have [%d] peers, switch to fast peer search", pc)
+					log.Infof("⚠️ Only have [%d] peers, switch to startup mode", pc)
 					relaxedMode.Store(false)
 				}
 			} else if hasSyncPeer && enoughPeers {
-				log.Infof("Found [%d] peers including sync peer, switching to relaxed peer search", pc)
+				log.Infof("✅ Got [%d] peers, switching to relaxed mode", pc)
 				relaxedMode.Store(true)
 			}
 			time.Sleep(time.Second * 30)

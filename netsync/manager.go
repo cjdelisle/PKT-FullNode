@@ -519,7 +519,7 @@ func (sm *SyncManager) handleDonePeerMsg(peer *peerpkg.Peer) {
 	if state, exists := sm.peerStates[peer]; exists {
 		// Remove the peer from the list of candidate peers.
 		delete(sm.peerStates, peer)
-		log.Infof("Lost peer %s (%s)", log.IpAddr(peer.Addr()))
+		log.Infof("Lost peer %s (%s)", log.IpAddr(peer.Addr()), peerDirection(peer))
 		sm.clearRequestedState(state)
 	}
 

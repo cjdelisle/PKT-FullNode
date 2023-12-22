@@ -282,7 +282,7 @@ func (vc *VoteCompute) compute(height int32) er.R {
 }
 
 func voteComputeThread(vc *VoteCompute) {
-	log.Info("VoteCompute: Thread launched")
+	log.Infof("VoteCompute: Thread launched")
 	for {
 		height := vc.currentHeight.AwaitUpdate()
 		if err := vc.compute(height); err != nil {
