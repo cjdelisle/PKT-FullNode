@@ -2061,27 +2061,6 @@ func (s *server) sendRandomInv(state *peerState) {
 	}
 }
 
-func (s *server) seedDNSThread() {
-	for {
-		connmgr.SeedFromDNS(activeNetParams.Params, defaultRequiredServices,
-			pktdLookup, func(addrs []*wire.NetAddress) {
-				// Bitcoind uses a lookup of the dns seeder here. This
-				// is rather strange since the values looked up by the
-				// DNS seed lookups will vary quite a lot.
-				// cjd Dec 6 2023: We're switching to a "magic" address
-				//                 which will allow us to differentiate
-				//                 more trusted addresses from addresses
-				//                 coming from random nodes.
-				src := wire.NetAddress{
-					Services: protocol.SFTrusted,
-					IP:       net.IPv4(0, 0, 0, 0),
-				}
-				s.addrManager.AddAddresses(addrs, &src)
-			})
-		time.Sleep(time.Second * 40)
-	}
-}
-
 // peerHandler is used to handle peer operations such as adding and removing
 // peers to and from the server, banning peers, and broadcasting messages to
 // peers.  It must be run in a goroutine.
@@ -2108,7 +2087,21 @@ func (s *server) peerHandler() {
 
 	if !cfg.DisableDNSSeed {
 		// Add peers discovered through DNS to the address manager.
-		go s.seedDNSThread()
+		connmgr.SeedFromDNS(activeNetParams.Params, defaultRequiredServices,
+			pktdLookup, func(addrs []*wire.NetAddress) {
+				// Bitcoind uses a lookup of the dns seeder here. This
+				// is rather strange since the values looked up by the
+				// DNS seed lookups will vary quite a lot.
+				// cjd Dec 6 2023: We're switching to a "magic" address
+				//                 which will allow us to differentiate
+				//                 more trusted addresses from addresses
+				//                 coming from random nodes.
+				src := wire.NetAddress{
+					Services: protocol.SFTrusted,
+					IP:       net.IPv4(0, 0, 0, 0),
+				}
+				s.addrManager.AddAddresses(addrs, &src)
+			})
 	}
 	go s.connManager.Start()
 
