@@ -30,6 +30,7 @@ import (
 	"github.com/pkt-cash/PKT-FullNode/btcutil"
 	"github.com/pkt-cash/PKT-FullNode/btcutil/bloom"
 	"github.com/pkt-cash/PKT-FullNode/btcutil/er"
+	"github.com/pkt-cash/PKT-FullNode/btcutil/util/mailbox"
 	"github.com/pkt-cash/PKT-FullNode/chaincfg"
 	"github.com/pkt-cash/PKT-FullNode/chaincfg/chainhash"
 	"github.com/pkt-cash/PKT-FullNode/connmgr"
@@ -2526,6 +2527,13 @@ func setupRPCListeners() ([]net.Listener, er.R) {
 	return listeners, nil
 }
 
+func (s *server) peerCount() int {
+	replyChan := make(chan []*serverPeer)
+	s.query <- getPeersMsg{reply: replyChan}
+	serverPeers := <-replyChan
+	return len(serverPeers)
+}
+
 // newServer returns a new pktd server configured to listen on addr for the
 // bitcoin network type specified by chainParams.  Use start to begin accepting
 // connections from peers.
@@ -2774,6 +2782,28 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 		targetOutbound = cfg.MaxPeers
 	}
 
+	relaxedMode := mailbox.NewMailbox(false)
+	go func() {
+		for {
+			pc := s.peerCount()
+			hasSyncPeer := s.syncManager.SyncPeer() != nil
+			enoughPeers := pc > (targetOutbound / 2)
+			if relaxedMode.Load() {
+				if !hasSyncPeer {
+					log.Infof("Lost sync peer, switch to fast peer search")
+					relaxedMode.Store(false)
+				} else if !enoughPeers {
+					log.Infof("Only have [%d] peers, switch to fast peer search", pc)
+					relaxedMode.Store(false)
+				}
+			} else if hasSyncPeer && enoughPeers {
+				log.Infof("Found [%d] peers including sync peer, switching to relaxed peer search", pc)
+				relaxedMode.Store(true)
+			}
+			time.Sleep(time.Second * 30)
+		}
+	}()
+
 	// Only setup a function to return new addresses to connect to when
 	// not running in connect-only mode.  The simulation network is always
 	// in connect-only mode since it is only intended to connect to
@@ -2784,7 +2814,7 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 	if !cfg.SimNet && !cfg.RegressionTest && len(cfg.ConnectPeers) == 0 {
 		newAddressFunc = func() (net.Addr, er.R) {
 			tries := 0
-			addr := s.addrManager.GetAddress(func(addr *addrmgr.KnownAddress) bool {
+			addr := s.addrManager.GetAddress(relaxedMode.Load(), func(addr *addrmgr.KnownAddress) bool {
 				tries++
 				// Address will not be invalid, local or unroutable
 				// because addrmanager rejects those on addition.

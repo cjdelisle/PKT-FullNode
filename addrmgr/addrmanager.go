@@ -885,7 +885,7 @@ func (a *AddrManager) getAddress(relaxedMode bool, isOk func(*KnownAddress) bool
 // random one from the possible addresses with preference given to ones that
 // have not been used recently and should not pick 'close' addresses
 // consecutively.
-func (a *AddrManager) GetAddress(isOk func(*KnownAddress) bool) *KnownAddress {
+func (a *AddrManager) GetAddress(relaxedMode bool, isOk func(*KnownAddress) bool) *KnownAddress {
 	// Protect concurrent access.
 	a.mtx.Lock()
 	defer a.mtx.Unlock()
@@ -894,7 +894,7 @@ func (a *AddrManager) GetAddress(isOk func(*KnownAddress) bool) *KnownAddress {
 		log.Infof("GetAddress() -> nil because no addresses at all")
 		return nil
 	}
-	addr := a.getAddress(false, isOk)
+	addr := a.getAddress(relaxedMode, isOk)
 	if addr != nil {
 		// Because we have an isOk function, we can assume that if that function passes
 		// the address WILL be attempted.
