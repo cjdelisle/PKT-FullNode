@@ -2790,14 +2790,14 @@ func newServer(listenAddrs, agentBlacklist, agentWhitelist []string,
 			enoughPeers := pc > (targetOutbound / 2)
 			if relaxedMode.Load() {
 				if !hasSyncPeer {
-					log.Infof("⚠️ Lost sync peer, switch to startup mode")
+					log.Warnf("Lost sync peer, switch to startup mode")
 					relaxedMode.Store(false)
 				} else if !enoughPeers {
-					log.Infof("⚠️ Only have [%d] peers, switch to startup mode", pc)
+					log.Warnf("Only have [%d] peers, switch to startup mode", pc)
 					relaxedMode.Store(false)
 				}
 			} else if hasSyncPeer && enoughPeers {
-				log.Infof("✅ Got [%d] peers, switching to relaxed mode", pc)
+				log.Infof("Got [%d] peers, switch to relaxed mode 😎", pc)
 				relaxedMode.Store(true)
 			}
 			time.Sleep(time.Second * 30)
