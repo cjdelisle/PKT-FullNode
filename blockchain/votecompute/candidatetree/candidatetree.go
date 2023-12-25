@@ -38,6 +38,7 @@ func NewCandidateTree(sizeLimit uint32) *CandidateTree {
 	return &CandidateTree{
 		tree:      redblacktree.NewWith(PreferRichest),
 		sizeLimit: sizeLimit,
+		byId:      make(map[string]*electorium.Vote),
 	}
 }
 
