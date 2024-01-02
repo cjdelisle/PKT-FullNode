@@ -901,7 +901,7 @@ func (a *AddrManager) GetAddress(relaxedMode bool, isOk func(*KnownAddress) bool
 		addr.attempts++
 		addr.lastattempt = time.Now()
 	} else {
-		log.Infof("GetAddress() -> nil no qualifying addresses found")
+		log.Debugf("GetAddress() -> nil no qualifying addresses found")
 	}
 	return addr
 }

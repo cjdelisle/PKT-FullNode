@@ -1393,7 +1393,6 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeChan <-chan str
 		Difficulty:           getDifficultyRatio(chainSnapshot.Bits, params),
 		MedianTime:           chainSnapshot.MedianTime.Unix(),
 		Pruned:               false,
-		Bip9SoftForks:        make(map[string]*btcjson.Bip9SoftForkDescription),
 	}
 
 	// Next, populate the response with information describing the current
@@ -1476,12 +1475,13 @@ func handleGetBlockChainInfo(s *rpcServer, cmd interface{}, closeChan <-chan str
 
 		// Finally, populate the soft-fork description with all the
 		// information gathered above.
-		chainInfo.Bip9SoftForks[forkName] = &btcjson.Bip9SoftForkDescription{
+		chainInfo.Bip9SoftForks = append(chainInfo.Bip9SoftForks, &btcjson.Bip9SoftForkDescription{
+			Name:      forkName,
 			Status:    strings.ToLower(statusString),
 			Bit:       deploymentDetails.BitNumber,
 			StartTime: int64(deploymentDetails.StartTime),
 			Timeout:   int64(deploymentDetails.ExpireTime),
-		}
+		})
 	}
 
 	return chainInfo, nil
