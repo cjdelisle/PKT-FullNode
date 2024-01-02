@@ -82,7 +82,9 @@ func ListWinnersBefore(dbTx database.Tx, startHeight int32, handler func(int32, 
 	} else {
 		c := buck.Cursor()
 		if !c.Seek(startHeightBytes) {
-			c.Last()
+			if !c.Last() {
+				return nil
+			}
 		}
 		for {
 			if height, err := decodeHeight(c.Key()); err != nil {
