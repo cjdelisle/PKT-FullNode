@@ -8,7 +8,7 @@ import (
 	"github.com/pkt-cash/PKT-FullNode/blockchain"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/balances"
-	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/db"
+	votedb "github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/db"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/votes"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/votewinnerdb"
 	"github.com/pkt-cash/PKT-FullNode/btcutil"
@@ -25,7 +25,7 @@ type VotesIndex struct {
 var _ Indexer = (*VotesIndex)(nil)
 
 func (vi *VotesIndex) Key() []byte {
-	return []byte("votebalance")
+	return []byte(votedb.BucketName)
 }
 
 const votesIndexName = "votes"
@@ -40,7 +40,7 @@ func (vi *VotesIndex) Create(dbTx database.Tx) er.R {
 
 func (vi *VotesIndex) Init() er.R {
 	if err := vi.db.Update(func(tx database.Tx) er.R {
-		if err := db.Init(tx); err != nil {
+		if err := votedb.Init(tx); err != nil {
 			return err
 		} else {
 			return votewinnerdb.Init(tx)
@@ -87,13 +87,12 @@ func NewVotes(db database.DB, params *chaincfg.Params) (*VotesIndex, er.R) {
 }
 
 func DropVotes(db database.DB, interrupt <-chan struct{}) er.R {
-	if err := dropIndex(db, []byte("votebalance"), votesIndexName, interrupt); err != nil {
+	if err := dropIndex(db, []byte(votedb.BucketName), votesIndexName, interrupt); err != nil {
 		return err
 	}
-	if err := dropIndex(db, []byte("votewinnerdb"), "vote winners", interrupt); err != nil {
-		return err
-	}
-	return nil
+	return db.Update(func(tx database.Tx) er.R {
+		return votewinnerdb.Destroy(tx)
+	})
 }
 
 func (vi *VotesIndex) NeedsInputs() bool {

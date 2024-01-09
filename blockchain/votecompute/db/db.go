@@ -14,7 +14,7 @@ import (
 // This bucket contains both votes and balances.
 // Balance structure is:  [address][0,0,0,0] => [blockn][balance]
 // Vote structure is:     [address][blockn]  => [is_candidate][vote]
-var bucketName = []byte("votebalance")
+const BucketName = "votebalance"
 
 const balanceInfoLen = 4 + 8
 
@@ -145,7 +145,7 @@ type AddressBalance struct {
 // addressScripts: A list of addresses in pkScript form
 // returns: A list of addressBalance entries for each address
 func FetchBalances(dbTx database.Tx, addressScripts [][]byte) ([]AddressBalance, er.R) {
-	balancesBucket := dbTx.Metadata().Bucket(bucketName)
+	balancesBucket := dbTx.Metadata().Bucket([]byte(BucketName))
 	out := make([]AddressBalance, 0, len(addressScripts))
 	for _, addressScript := range addressScripts {
 		balances := balancesBucket.Get(encodeBalanceKey(addressScript))
@@ -166,7 +166,7 @@ func FetchBalances(dbTx database.Tx, addressScripts [][]byte) ([]AddressBalance,
 // dbTx: A read/write transaction
 // balances: A list of addressBalance objects
 func PutBalances(dbTx database.Tx, balances []AddressBalance) er.R {
-	balancesBucket := dbTx.Metadata().Bucket(bucketName)
+	balancesBucket := dbTx.Metadata().Bucket([]byte(BucketName))
 	for _, bal := range balances {
 		if bal.BalanceInfo == nil {
 			if err := balancesBucket.Delete(encodeBalanceKey(bal.AddressScript)); err != nil {
@@ -187,7 +187,7 @@ func DeleteVote(
 	blockNum int32,
 	addrScript []byte,
 ) er.R {
-	balancesBucket := dbTx.Metadata().Bucket(bucketName)
+	balancesBucket := dbTx.Metadata().Bucket([]byte(BucketName))
 	if balancesBucket == nil {
 		return er.New("Unable to delete vote, bucket not created")
 	}
@@ -203,7 +203,7 @@ func PutVote(
 	isCandidate bool,
 	voteForScript []byte,
 ) er.R {
-	balancesBucket := dbTx.Metadata().Bucket(bucketName)
+	balancesBucket := dbTx.Metadata().Bucket([]byte(BucketName))
 	if balancesBucket == nil {
 		return er.New("Unable to store vote, bucket not created")
 	}
@@ -214,10 +214,10 @@ func PutVote(
 }
 
 func Init(dbTx database.Tx) er.R {
-	buck := dbTx.Metadata().Bucket(bucketName)
+	buck := dbTx.Metadata().Bucket([]byte(BucketName))
 	if buck == nil {
 		log.Infof("Creating address balances and votes in database")
-		if b, err := dbTx.Metadata().CreateBucket(bucketName); err != nil {
+		if b, err := dbTx.Metadata().CreateBucket([]byte(BucketName)); err != nil {
 			return err
 		} else {
 			buck = b
@@ -317,7 +317,7 @@ func ListAddressInfo(
 	handler func(*AddressInfo) er.R,
 ) er.R {
 	//lastBlock := getLimitBlock(currentBlock, lastEpoch)
-	buck := dbTx.Metadata().Bucket(bucketName)
+	buck := dbTx.Metadata().Bucket([]byte(BucketName))
 	if buck == nil {
 		return er.Errorf("Address balances not indexed, --addressbalances required for this RPC")
 	}
@@ -437,7 +437,7 @@ func PruneExpired(
 	// The vote expiration prune limit is now minus the vote expiration time (52 epochs)
 	// minus twice the prune limit.
 	voteExpireLimit := truncateLimit - VoteExpirationBlocks
-	buck := dbTx.Metadata().Bucket(bucketName)
+	buck := dbTx.Metadata().Bucket([]byte(BucketName))
 	if buck == nil {
 		// No bucket, nothing to prune, don't bother returning an error
 		return nil, nil
