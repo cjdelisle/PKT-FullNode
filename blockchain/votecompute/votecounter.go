@@ -132,6 +132,8 @@ func (vc *VoteCompute) compute(height int32) er.R {
 	}
 	if height < nextElectionHeight+startCountOffset {
 		// We don't have enough data to run a vote computation
+		log.Debugf("VoteCompute: height [%d] is less than nextElectionHeight[%d] + startCountOffset[%d]",
+			lastElectionHeight, nextElectionHeight, startCountOffset)
 		return nil
 	}
 
