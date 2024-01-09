@@ -32,12 +32,6 @@ func (vi *VotesIndex) Name() string {
 }
 
 func (vi *VotesIndex) Create(dbTx database.Tx) er.R {
-	if _, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("votebalance")); err != nil {
-		return err
-	}
-	if _, err := dbTx.Metadata().CreateBucketIfNotExists([]byte("votewinnerdb")); err != nil {
-		return err
-	}
 	return nil
 }
 
