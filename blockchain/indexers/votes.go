@@ -8,7 +8,9 @@ import (
 	"github.com/pkt-cash/PKT-FullNode/blockchain"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/balances"
+	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/db"
 	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/votes"
+	"github.com/pkt-cash/PKT-FullNode/blockchain/votecompute/votewinnerdb"
 	"github.com/pkt-cash/PKT-FullNode/btcutil"
 	"github.com/pkt-cash/PKT-FullNode/btcutil/er"
 	"github.com/pkt-cash/PKT-FullNode/chaincfg"
@@ -16,6 +18,7 @@ import (
 )
 
 type VotesIndex struct {
+	db database.DB
 	vc *votecompute.VoteCompute
 }
 
@@ -36,6 +39,15 @@ func (vi *VotesIndex) Create(dbTx database.Tx) er.R {
 }
 
 func (vi *VotesIndex) Init() er.R {
+	if err := vi.db.Update(func(tx database.Tx) er.R {
+		if err := db.Init(tx); err != nil {
+			return err
+		} else {
+			return votewinnerdb.Init(tx)
+		}
+	}); err != nil {
+		return err
+	}
 	return vi.vc.Init()
 }
 
@@ -68,6 +80,7 @@ func NewVotes(db database.DB, params *chaincfg.Params) (*VotesIndex, er.R) {
 		return nil, err
 	} else {
 		return &VotesIndex{
+			db: db,
 			vc: vc,
 		}, nil
 	}
