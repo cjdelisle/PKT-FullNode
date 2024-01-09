@@ -1,6 +1,7 @@
 package votecompute
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"hash"
@@ -158,6 +159,8 @@ func (vc *VoteCompute) compute(height int32) er.R {
 			// Zero balance addresses are excluded from computation. A non-voting
 			// zero balance address will be completely pruned from the db and we do not
 			// guarantee whether it has been pruned yet.
+		} else if bytes.Equal(ai.AddressScript, vc.cp.InitialNetworkSteward) {
+			// The old Network Steward address is not allowed to vote
 		} else if !ai.IsCandidate && len(ai.VoteFor) == 0 {
 			// If they're not candidating or voting, then there's nothing to do here.
 			// But we do include them into the hash as non-candidate non-voter addresses.
