@@ -132,8 +132,6 @@ func (vc *VoteCompute) compute(height int32) er.R {
 	}
 	if height < nextElectionHeight+startCountOffset {
 		// We don't have enough data to run a vote computation
-		log.Debugf("VoteCompute: height [%d] is less than nextElectionHeight[%d] + startCountOffset[%d]",
-			lastElectionHeight, nextElectionHeight, startCountOffset)
 		return nil
 	}
 
@@ -292,14 +290,14 @@ func (vc *VoteCompute) compute(height int32) er.R {
 
 func voteComputeThread(vc *VoteCompute) {
 	log.Infof("VoteCompute: Thread launched")
-	height := vc.currentHeight.Load()
+	height := int32(-100)
 	for {
+		height = vc.currentHeight.AwaitTrue(func(h int32) bool { return h != height })
 		if err := vc.compute(height); err != nil {
 			if abortErr.Is(err) {
 				continue
 			}
 			log.Criticalf("Error in vote computation: %v", err)
 		}
-		height = vc.currentHeight.AwaitUpdate()
 	}
 }
