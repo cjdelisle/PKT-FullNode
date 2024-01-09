@@ -77,7 +77,11 @@ func (vc *VoteCompute) scanBalances(blockHeight int32, handler func(ai *db.Addre
 
 func (vc *VoteCompute) addressPrinter(script []byte) log.LogClosure {
 	return log.C(func() string {
-		return txscript.PkScriptToAddress(script, vc.cp).EncodeAddress()
+		if len(script) > 0 {
+			return txscript.PkScriptToAddress(script, vc.cp).EncodeAddress()
+		} else {
+			return "<nobody>"
+		}
 	})
 }
 
