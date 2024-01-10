@@ -49,11 +49,10 @@ func (vc *VoteCompute) scanBalances(blockHeight int32, handler func(ai *db.Addre
 		deadline := time.Now().Add(timeLimit)
 		deadlineReached := false
 		if err := vc.db.View(func(tx database.Tx) er.R {
-			first := true
 			return db.ListAddressInfo(tx, startFrom, effectiveHeight, func(ai *db.AddressInfo) er.R {
-				if first {
-					first = false
-					log.Debugf("Restarting from: [%s]", vc.addressPrinter(ai.AddressScript))
+				if bytes.Equal(ai.AddressScript, startFrom) {
+					// Skip the first address because it's the one we were passed.
+					return nil
 				}
 				if time.Now().After(deadline) {
 					log.Debugf("Stopping at: [%s]", vc.addressPrinter(ai.AddressScript))
