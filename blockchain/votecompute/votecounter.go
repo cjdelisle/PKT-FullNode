@@ -50,10 +50,6 @@ func (vc *VoteCompute) scanBalances(blockHeight int32, handler func(ai *db.Addre
 		deadlineReached := false
 		if err := vc.db.View(func(tx database.Tx) er.R {
 			return db.ListAddressInfo(tx, startFrom, effectiveHeight, func(ai *db.AddressInfo) er.R {
-				if bytes.Equal(ai.AddressScript, startFrom) {
-					// Skip the first address because it's the one we were passed.
-					return nil
-				}
 				if time.Now().After(deadline) {
 					deadlineReached = true
 					startFrom = ai.AddressScript
