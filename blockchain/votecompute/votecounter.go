@@ -55,7 +55,6 @@ func (vc *VoteCompute) scanBalances(blockHeight int32, handler func(ai *db.Addre
 					return nil
 				}
 				if time.Now().After(deadline) {
-					log.Debugf("Stopping at: [%s]", vc.addressPrinter(ai.AddressScript))
 					deadlineReached = true
 					startFrom = ai.AddressScript
 					return er.LoopBreak
@@ -149,6 +148,7 @@ func (vc *VoteCompute) compute(height int32) er.R {
 	log.Infof("VoteCompute: Starting vote computation for height [%d] (last vote at [%d])",
 		nextElectionHeight, lastElectionHeight)
 	expired := 0
+	addressCount := 0
 	t0 := time.Now()
 	hash := blake2b.New256()
 	// Section 1: non-candidate non-voters by balance
@@ -156,7 +156,7 @@ func (vc *VoteCompute) compute(height int32) er.R {
 	i := 0
 	if err := vc.scanBalances(nextElectionHeight, func(ai *db.AddressInfo) er.R {
 		i++
-		if i%10000 == 0 {
+		if i%100000 == 0 {
 			log.Debugf("VoteCompute: Scanning address balances and votes [%d]", i)
 		}
 		expired += int(ai.ExpiredCount)
@@ -164,7 +164,10 @@ func (vc *VoteCompute) compute(height int32) er.R {
 			// Zero balance addresses are excluded from computation. A non-voting
 			// zero balance address will be completely pruned from the db and we do not
 			// guarantee whether it has been pruned yet.
-		} else if bytes.Equal(ai.AddressScript, vc.cp.InitialNetworkSteward) {
+			return nil
+		}
+		addressCount++
+		if bytes.Equal(ai.AddressScript, vc.cp.InitialNetworkSteward) {
 			// The old Network Steward address is not allowed to vote
 		} else if !ai.IsCandidate && len(ai.VoteFor) == 0 {
 			// If they're not candidating or voting, then there's nothing to do here.
@@ -263,8 +266,8 @@ func (vc *VoteCompute) compute(height int32) er.R {
 	vc.stopAtHeight.Store(nextStopAt)
 
 	timeTaken := time.Since(t0)
-	log.Infof("VoteCompute: Vote won by [%s] (found in [%s]) - [%d] expired entries",
-		vc.addressPrinter(winScr), timeTaken, expired)
+	log.Infof("VoteCompute: Vote won by [%s] (found in [%s]) - [%d] balances and [%d] expired",
+		vc.addressPrinter(winScr), timeTaken, addressCount, expired)
 
 	if expired > expiredToPrune {
 		var startFrom []byte

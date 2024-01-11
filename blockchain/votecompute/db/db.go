@@ -267,6 +267,8 @@ type AddressInfo struct {
 	BalanceBlock  int32
 	VoteBlock     int32
 	ExpiredCount  int32
+	VoteCount     int32
+	BalanceCount  int32
 }
 
 const EpochBlocks = 60 * 24 * 7
